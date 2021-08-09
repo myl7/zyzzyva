@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/rsa"
 	"crypto/sha512"
@@ -12,7 +11,6 @@ import (
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
 	"hash"
-	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -125,8 +123,7 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) handleC2p(c2p msg.Client2Primary) error {
-	err := msg.VerifySig(c2p, []*rsa.PublicKey{conf.Pub[c2p.Req.ClientId]})
-	if err != nil {
+	if !msg.VerifySig(c2p, []*rsa.PublicKey{conf.Pub[c2p.Req.ClientId]}) {
 		return nil
 	}
 
@@ -145,15 +142,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 
 	r := c2p.Req
 	rs := c2p.ReqSig
-	rb, err := msg.Serialize(c2p.Req)
-	if err != nil {
-		return err
-	}
-
-	rd, err := utils.GenHash(rb)
-	if err != nil {
-		return err
-	}
+	rd := utils.GenHashObj(r)
 
 	s.s.historyHash.Write(rd)
 
@@ -164,37 +153,13 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 		ReqHash:     rd,
 		Extra:       conf.Extra,
 	}
-	orb, err := msg.Serialize(or)
-	if err != nil {
-		return err
-	}
-
-	ord, err := utils.GenHash(orb)
-	if err != nil {
-		return err
-	}
-
-	ors, err := utils.GenSig(ord, conf.Priv[s.id])
-	if err != nil {
-		return err
-	}
-
+	ors := utils.GenSigObj(or, conf.Priv[s.id])
 	p2r := msg.Primary2Replica{
 		T:           msg.TypeP2r,
 		OrderReq:    or,
 		OrderReqSig: ors,
 		Req:         r,
 		ReqSig:      rs,
-	}
-
-	p2rb, err := msg.Serialize(p2r)
-	if err != nil {
-		return err
-	}
-
-	p2rBin, err := ioutil.ReadAll(p2rb)
-	if err != nil {
-		return err
 	}
 
 	var wg sync.WaitGroup
@@ -204,16 +169,8 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 			go func() {
 				defer wg.Done()
 
-				res, err := utils.GenHash(bytes.NewReader(p2r.Req.Data))
-				if err != nil {
-					panic(err)
-				}
-
-				resd, err := utils.GenHash(bytes.NewReader(res))
-				if err != nil {
-					panic(err)
-				}
-
+				res := utils.GenHash(p2r.Req.Data)
+				resd := utils.GenHash(res)
 				sr := msg.SpecResponse{
 					View:        s.s.view,
 					Seq:         or.Seq,
@@ -222,22 +179,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 					ClientId:    r.ClientId,
 					Timestamp:   r.Timestamp,
 				}
-
-				srb, err := msg.Serialize(sr)
-				if err != nil {
-					panic(err)
-				}
-
-				srd, err := utils.GenHash(srb)
-				if err != nil {
-					panic(err)
-				}
-
-				srs, err := utils.GenSig(srd, conf.Priv[s.id])
-				if err != nil {
-					panic(err)
-				}
-
+				srs := utils.GenSigObj(sr, conf.Priv[s.id])
 				r2c := msg.Replica2Client{
 					T:           msg.TypeR2c,
 					SpecRes:     sr,
@@ -248,17 +190,12 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 					OrderReqSig: ors,
 				}
 
-				r2cb, err := msg.Serialize(r2c)
-				if err != nil {
-					panic(err)
-				}
-
 				conn, err := net.Dial("tcp", conf.GetReqAddr(r.ClientId))
 				if err != nil {
 					panic(err)
 				}
 
-				_, err = bufio.NewReader(r2cb).WriteTo(conn)
+				_, err = conn.Write(utils.Serialize(r2c))
 				if err != nil {
 					panic(err)
 				}
@@ -273,7 +210,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 					panic(err)
 				}
 
-				_, err = bytes.NewReader(p2rBin).WriteTo(conn)
+				_, err = conn.Write(utils.Serialize(p2r))
 				if err != nil {
 					panic(err)
 				}
@@ -286,24 +223,14 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 }
 
 func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
-	err := msg.VerifySig(p2r, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[p2r.Req.ClientId]})
-	if err != nil {
+	if !msg.VerifySig(p2r, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[p2r.Req.ClientId]}) {
 		return nil
 	}
 
 	r := p2r.Req
 	or := p2r.OrderReq
 	ors := p2r.OrderReqSig
-
-	rb, err := msg.Serialize(r)
-	if err != nil {
-		return err
-	}
-
-	rd, err := utils.GenHash(rb)
-	if err != nil {
-		return err
-	}
+	rd := utils.GenHashObj(r)
 
 	if !bytes.Equal(rd, or.ReqHash) {
 		return nil
@@ -324,16 +251,8 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
 	seq := s.s.nextSeq
 	s.s.nextSeq += 1
 
-	res, err := utils.GenHash(bytes.NewReader(p2r.Req.Data))
-	if err != nil {
-		return err
-	}
-
-	resd, err := utils.GenHash(bytes.NewReader(res))
-	if err != nil {
-		return err
-	}
-
+	res := utils.GenHash(p2r.Req.Data)
+	resd := utils.GenHash(res)
 	sr := msg.SpecResponse{
 		View:        s.s.view,
 		Seq:         seq,
@@ -342,22 +261,7 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
 		ClientId:    r.ClientId,
 		Timestamp:   r.Timestamp,
 	}
-
-	srb, err := msg.Serialize(sr)
-	if err != nil {
-		return err
-	}
-
-	srd, err := utils.GenHash(srb)
-	if err != nil {
-		return err
-	}
-
-	srs, err := utils.GenSig(srd, conf.Priv[s.id])
-	if err != nil {
-		return err
-	}
-
+	srs := utils.GenSigObj(sr, conf.Priv[s.id])
 	r2c := msg.Replica2Client{
 		T:           msg.TypeR2c,
 		SpecRes:     sr,
@@ -368,17 +272,12 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
 		OrderReqSig: ors,
 	}
 
-	r2cb, err := msg.Serialize(r2c)
-	if err != nil {
-		return err
-	}
-
 	conn, err := net.Dial("tcp", conf.GetReqAddr(r.ClientId))
 	if err != nil {
 		return err
 	}
 
-	_, err = bufio.NewReader(r2cb).WriteTo(conn)
+	_, err = conn.Write(utils.Serialize(r2c))
 	if err != nil {
 		return err
 	}

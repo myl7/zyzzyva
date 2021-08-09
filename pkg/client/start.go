@@ -1,8 +1,6 @@
 package client
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/rsa"
 	"encoding/base64"
@@ -76,31 +74,11 @@ func (c *Client) Run() error {
 			Timestamp: time.Now().UnixNano(),
 			ClientId:  c.id,
 		}
-
-		rb, err := msg.Serialize(r)
-		if err != nil {
-			return err
-		}
-
-		rd, err := utils.GenHash(rb)
-		if err != nil {
-			return err
-		}
-
-		rs, err := utils.GenSig(rd, conf.Priv[c.id])
-		if err != nil {
-			return err
-		}
-
+		rs := utils.GenSigObj(r, conf.Priv[c.id])
 		c2p := msg.Client2Primary{
 			T:      msg.TypeC2p,
 			Req:    r,
 			ReqSig: rs,
-		}
-
-		c2pb, err := msg.Serialize(c2p)
-		if err != nil {
-			return err
 		}
 
 		conn, err := net.Dial("tcp", conf.GetReqAddr(c.primary))
@@ -108,7 +86,7 @@ func (c *Client) Run() error {
 			return err
 		}
 
-		_, err = bufio.NewReader(c2pb).WriteTo(conn)
+		_, err = conn.Write(utils.Serialize(c2p))
 		if err != nil {
 			return err
 		}
@@ -158,12 +136,7 @@ func (c *Client) Run() error {
 		}
 		if maxN >= 3*conf.F+1 {
 			out := maxR2c.Result
-			ok, err := utils.VerifyHash(out, bytes.NewReader(in))
-			if err != nil {
-				panic(err)
-			}
-
-			if ok {
+			if utils.VerifyHash(out, in) {
 				log.Println("OK")
 			} else {
 				log.Fatalln("Failed")
@@ -223,8 +196,7 @@ func (c *Client) Listen(spec chan<- msg.Replica2Client) error {
 				panic(err)
 			}
 
-			err := msg.VerifySig(r2c, []*rsa.PublicKey{conf.Pub[r2c.ServerId], conf.Pub[c.primary]})
-			if err != nil {
+			if !msg.VerifySig(r2c, []*rsa.PublicKey{conf.Pub[r2c.ServerId], conf.Pub[c.primary]}) {
 				continue
 			}
 

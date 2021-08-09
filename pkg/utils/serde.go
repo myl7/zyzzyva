@@ -1,28 +1,27 @@
-package msg
+package utils
 
 import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"io"
 )
 
-func Serialize(obj interface{}) (io.Reader, error) {
+func Serialize(obj interface{}) []byte {
 	b, err := json.Marshal(obj)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	var buf bytes.Buffer
 	err = binary.Write(&buf, binary.BigEndian, int32(len(b)))
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	_, err = buf.Write(b)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	return &buf, err
+	return buf.Bytes()
 }
