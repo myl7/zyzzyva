@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/json"
 	"errors"
+	"github.com/myl7/zyzzyva/pkg/comu"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
@@ -146,60 +147,41 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < conf.N; i++ {
-		if i == s.id {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
 
-				res := utils.GenHash(p2r.Req.Data)
-				resd := utils.GenHash(res)
-				sr := msg.SpecResponse{
-					View:        s.s.view,
-					Seq:         or.Seq,
-					HistoryHash: s.s.historyHash.Sum(nil),
-					ResHash:     resd,
-					ClientId:    r.ClientId,
-					Timestamp:   r.Timestamp,
-				}
-				srs := utils.GenSigObj(sr, conf.Priv[s.id])
-				r2c := msg.Replica2Client{
-					T:           msg.TypeR2c,
-					SpecRes:     sr,
-					SpecResSig:  srs,
-					ServerId:    s.id,
-					Result:      res,
-					OrderReq:    or,
-					OrderReqSig: ors,
-				}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-				conn, err := net.Dial("udp", conf.GetReqAddr(r.ClientId))
-				if err != nil {
-					panic(err)
-				}
-
-				_, err = conn.Write(utils.Serialize(r2c))
-				if err != nil {
-					panic(err)
-				}
-			}()
-		} else {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-
-				conn, err := net.Dial("udp", conf.GetReqAddr(i))
-				if err != nil {
-					panic(err)
-				}
-
-				_, err = conn.Write(utils.Serialize(p2r))
-				if err != nil {
-					panic(err)
-				}
-			}(i)
+		res := utils.GenHash(p2r.Req.Data)
+		resd := utils.GenHash(res)
+		sr := msg.SpecResponse{
+			View:        s.s.view,
+			Seq:         or.Seq,
+			HistoryHash: s.s.historyHash.Sum(nil),
+			ResHash:     resd,
+			ClientId:    r.ClientId,
+			Timestamp:   r.Timestamp,
 		}
-	}
+		srs := utils.GenSigObj(sr, conf.Priv[s.id])
+		r2c := msg.Replica2Client{
+			T:           msg.TypeR2c,
+			SpecRes:     sr,
+			SpecResSig:  srs,
+			ServerId:    s.id,
+			Result:      res,
+			OrderReq:    or,
+			OrderReqSig: ors,
+		}
+
+		comu.UdpSendObj(r2c, r.ClientId)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		comu.UdpBroadcastObj(p2r)
+	}()
+
 	wg.Wait()
 }
 
@@ -253,13 +235,5 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) {
 		OrderReqSig: ors,
 	}
 
-	conn, err := net.Dial("udp", conf.GetReqAddr(r.ClientId))
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = conn.Write(utils.Serialize(r2c))
-	if err != nil {
-		panic(err)
-	}
+	comu.UdpSendObj(r2c, r.ClientId)
 }

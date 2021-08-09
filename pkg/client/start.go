@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/myl7/zyzzyva/pkg/comu"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
@@ -75,15 +76,7 @@ func (c *Client) Run() {
 			ReqSig: rs,
 		}
 
-		conn, err := net.Dial("udp", conf.GetReqAddr(c.primary))
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = conn.Write(utils.Serialize(c2p))
-		if err != nil {
-			panic(err)
-		}
+		comu.UdpSendObj(c2p, c.primary)
 
 		c.listenMu.Lock()
 		c.listen = true
