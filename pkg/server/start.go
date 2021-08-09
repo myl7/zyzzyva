@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"crypto/sha512"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"github.com/myl7/zyzzyva/pkg/conf"
@@ -55,30 +54,20 @@ func NewServer(id int) *Server {
 }
 
 func (s *Server) Run() {
-	l, err := net.Listen("tcp", conf.GetListenAddr(s.id))
+	l, err := net.ListenPacket("udp", conf.GetListenAddr(s.id))
 	if err != nil {
 		panic(err)
 	}
 
+	buf := make([]byte, 1*1024*1024)
+
 	for {
-		conn, err := l.Accept()
+		n, _, err := l.ReadFrom(buf)
 		if err != nil {
 			panic(err)
 		}
 
-		var n int32
-		err = binary.Read(conn, binary.BigEndian, &n)
-		if err != nil {
-			panic(err)
-		}
-
-		b := make([]byte, n)
-		_, err = conn.Read(b)
-		if err != nil {
-			panic(err)
-		}
-
-		log.Printf("Got msg: %d", s.id)
+		b := buf[:n]
 
 		var m struct {
 			T int
@@ -184,7 +173,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 					OrderReqSig: ors,
 				}
 
-				conn, err := net.Dial("tcp", conf.GetReqAddr(r.ClientId))
+				conn, err := net.Dial("udp", conf.GetReqAddr(r.ClientId))
 				if err != nil {
 					panic(err)
 				}
@@ -199,7 +188,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 			go func(i int) {
 				defer wg.Done()
 
-				conn, err := net.Dial("tcp", conf.GetReqAddr(i))
+				conn, err := net.Dial("udp", conf.GetReqAddr(i))
 				if err != nil {
 					panic(err)
 				}
@@ -264,7 +253,7 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) {
 		OrderReqSig: ors,
 	}
 
-	conn, err := net.Dial("tcp", conf.GetReqAddr(r.ClientId))
+	conn, err := net.Dial("udp", conf.GetReqAddr(r.ClientId))
 	if err != nil {
 		panic(err)
 	}

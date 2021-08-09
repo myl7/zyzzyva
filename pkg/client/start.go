@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"github.com/myl7/zyzzyva/pkg/conf"
@@ -76,7 +75,7 @@ func (c *Client) Run() {
 			ReqSig: rs,
 		}
 
-		conn, err := net.Dial("tcp", conf.GetReqAddr(c.primary))
+		conn, err := net.Dial("udp", conf.GetReqAddr(c.primary))
 		if err != nil {
 			panic(err)
 		}
@@ -143,13 +142,15 @@ func (c *Client) Run() {
 }
 
 func (c *Client) Listen(spec chan<- msg.Replica2Client) {
-	l, err := net.Listen("tcp", conf.GetListenAddr(c.id))
+	l, err := net.ListenPacket("udp", conf.GetListenAddr(c.id))
 	if err != nil {
 		panic(err)
 	}
 
+	buf := make([]byte, 1*1024*1024)
+
 	for {
-		conn, err := l.Accept()
+		n, _, err := l.ReadFrom(buf)
 		if err != nil {
 			panic(err)
 		}
@@ -160,17 +161,7 @@ func (c *Client) Listen(spec chan<- msg.Replica2Client) {
 		}
 		c.listenMu.Unlock()
 
-		var n int32
-		err = binary.Read(conn, binary.BigEndian, &n)
-		if err != nil {
-			panic(err)
-		}
-
-		b := make([]byte, n)
-		_, err = conn.Read(b)
-		if err != nil {
-			panic(err)
-		}
+		b := buf[:n]
 
 		var m struct {
 			T int
