@@ -1,37 +1,25 @@
 package main
 
 import (
+	"flag"
 	"github.com/myl7/zyzzyva/pkg/client"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/server"
-	"sync"
+	"log"
 )
 
 func main() {
-	err := conf.InitKeys()
-	if err != nil {
-		panic(err)
+	id := flag.Int("id", 0, "Client ID or Server ID")
+	flag.Parse()
+	conf.InitKeys(*id)
+
+	log.Printf("ID %d started", *id)
+
+	if *id >= conf.N {
+		c := client.NewClient(*id)
+		c.Run()
+	} else {
+		s := server.NewServer(*id)
+		s.Run()
 	}
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < conf.N; i++ {
-		s := server.NewServer(i)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			s.Run()
-		}()
-	}
-
-	for i := 0; i < conf.M; i++ {
-		c := client.NewClient(i + conf.N)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c.Run()
-		}()
-	}
-
-	wg.Wait()
 }
