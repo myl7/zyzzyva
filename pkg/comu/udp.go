@@ -18,7 +18,7 @@ func UdpSend(b []byte, tid int) {
 	}
 }
 
-func UdpBroadcast(b []byte) {
+func UdpMulticast(b []byte) {
 	conn, err := net.Dial("udp", conf.UdpMulticastAddr)
 	if err != nil {
 		panic(err)
@@ -34,8 +34,8 @@ func UdpSendObj(obj interface{}, tid int) {
 	UdpSend(utils.Serialize(obj), tid)
 }
 
-func UdpBroadcastObj(obj interface{}) {
-	UdpBroadcast(utils.Serialize(obj))
+func UdpMulticastObj(obj interface{}) {
+	UdpMulticast(utils.Serialize(obj))
 }
 
 func ListenMulticastUdp() *net.UDPConn {

@@ -220,7 +220,7 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		comu.UdpBroadcastObj(p2r)
+		comu.UdpMulticastObj(p2r)
 	}()
 
 	wg.Wait()
