@@ -55,6 +55,19 @@ func NewServer(id int) *Server {
 }
 
 func (s *Server) Run() {
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		s.Listen()
+	}()
+
+	wg.Wait()
+}
+
+func (s *Server) Listen() {
 	l, err := net.ListenPacket("udp", conf.GetListenAddr(s.id))
 	if err != nil {
 		panic(err)
@@ -90,6 +103,34 @@ func (s *Server) Run() {
 			}
 
 			s.handleC2p(c2p)
+		default:
+			panic(errors.New("unknown msg type"))
+		}
+	}
+}
+
+func (s Server) ListenMulticast() {
+	l := comu.ListenMulticastUdp()
+	buf := make([]byte, 1*1024*1024)
+
+	for {
+		n, _, err := l.ReadFrom(buf)
+		if err != nil {
+			panic(err)
+		}
+
+		b := buf[:n]
+
+		var m struct {
+			T int
+		}
+		err = json.Unmarshal(b, &m)
+		if err != nil {
+			panic(err)
+		}
+
+		t := m.T
+		switch t {
 		case msg.TypeP2r:
 			log.Println("Got p2r")
 

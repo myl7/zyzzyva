@@ -33,7 +33,7 @@ func InitKeys() error {
 }
 
 var UdpMulticastAddr = "224.0.0.1:10000"
-var UdpMulticastInterface = "eth0"
+var UdpMulticastInterface = ""
 
 func GetReqAddr(id int) string {
 	p := 0
