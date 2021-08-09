@@ -17,7 +17,7 @@ var Pub []*rsa.PublicKey
 var KeyUrl = "https://share.myl.moe/?/zyzzyva/keys/"
 
 func InitKeys(id int) {
-	Priv := make([]*rsa.PrivateKey, N+M)
+	Priv = make([]*rsa.PrivateKey, N+M)
 
 	r, err := http.Get(KeyUrl + fmt.Sprintf("%d.txt", id))
 	if err != nil {
