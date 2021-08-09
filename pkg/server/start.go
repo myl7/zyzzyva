@@ -116,7 +116,7 @@ func (s *Server) Listen() {
 	}
 }
 
-func (s Server) ListenMulticast() {
+func (s *Server) ListenMulticast() {
 	l := comu.ListenMulticastUdp()
 	buf := make([]byte, 1*1024*1024)
 
