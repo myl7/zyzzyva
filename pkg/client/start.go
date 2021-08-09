@@ -54,66 +54,12 @@ func specResKeyFromR2C(r2c msg.Replica2Client) specResKey {
 }
 
 func (c *Client) Run() error {
-	l, err := net.Listen("tcp", conf.GetListenAddr(c.id))
-	if err != nil {
-		return err
-	}
-
 	spec := make(chan msg.Replica2Client, conf.N)
 
 	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				panic(err)
-			}
-
-			c.listenMu.Lock()
-			if !c.listen {
-				continue
-			}
-			c.listenMu.Unlock()
-
-			var n int32
-			err = binary.Read(conn, binary.BigEndian, &n)
-			if err != nil {
-				panic(err)
-			}
-
-			b := make([]byte, n)
-			_, err = conn.Read(b)
-			if err != nil {
-				panic(err)
-			}
-
-			var m struct {
-				T int
-			}
-			err = json.Unmarshal(b, &m)
-			if err != nil {
-				panic(err)
-			}
-
-			t := m.T
-			switch t {
-			case msg.TypeR2c:
-				log.Println("Got r2c")
-
-				var r2c msg.Replica2Client
-				err = json.Unmarshal(b, &r2c)
-				if err != nil {
-					panic(err)
-				}
-
-				err := msg.VerifySig(r2c, []*rsa.PublicKey{conf.Pub[r2c.ServerId], conf.Pub[c.primary]})
-				if err != nil {
-					continue
-				}
-
-				spec <- r2c
-			default:
-				panic(errors.New("unknown msg type"))
-			}
+		err := c.Listen(spec)
+		if err != nil {
+			panic(err)
 		}
 	}()
 
@@ -224,6 +170,67 @@ func (c *Client) Run() error {
 			}
 		} else {
 			log.Printf("Not complete: %d", maxN)
+		}
+	}
+}
+
+func (c *Client) Listen(spec chan<- msg.Replica2Client) error {
+	l, err := net.Listen("tcp", conf.GetListenAddr(c.id))
+	if err != nil {
+		return err
+	}
+
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			panic(err)
+		}
+
+		c.listenMu.Lock()
+		if !c.listen {
+			continue
+		}
+		c.listenMu.Unlock()
+
+		var n int32
+		err = binary.Read(conn, binary.BigEndian, &n)
+		if err != nil {
+			panic(err)
+		}
+
+		b := make([]byte, n)
+		_, err = conn.Read(b)
+		if err != nil {
+			panic(err)
+		}
+
+		var m struct {
+			T int
+		}
+		err = json.Unmarshal(b, &m)
+		if err != nil {
+			panic(err)
+		}
+
+		t := m.T
+		switch t {
+		case msg.TypeR2c:
+			log.Println("Got r2c")
+
+			var r2c msg.Replica2Client
+			err = json.Unmarshal(b, &r2c)
+			if err != nil {
+				panic(err)
+			}
+
+			err := msg.VerifySig(r2c, []*rsa.PublicKey{conf.Pub[r2c.ServerId], conf.Pub[c.primary]})
+			if err != nil {
+				continue
+			}
+
+			spec <- r2c
+		default:
+			panic(errors.New("unknown msg type"))
 		}
 	}
 }
