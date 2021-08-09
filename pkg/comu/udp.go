@@ -7,7 +7,17 @@ import (
 )
 
 func UdpSend(b []byte, tid int) {
-	conn, err := net.Dial("udp", conf.GetReqAddr(tid))
+	addr, err := net.ResolveUDPAddr("udp", conf.GetReqAddr(tid))
+	if err != nil {
+		panic(err)
+	}
+
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		panic(err)
+	}
+
+	err = conn.SetWriteBuffer(1 * 1024 * 1024)
 	if err != nil {
 		panic(err)
 	}
@@ -55,6 +65,11 @@ func ListenMulticastUdp() *net.UDPConn {
 	}
 
 	conn, err := net.ListenMulticastUDP("udp", ifi, addr)
+	if err != nil {
+		panic(err)
+	}
+
+	err = conn.SetReadBuffer(1 * 1024 * 1024)
 	if err != nil {
 		panic(err)
 	}

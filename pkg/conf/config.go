@@ -23,7 +23,7 @@ var CPInterval = 100
 
 var Extra = []byte("extra")
 
-var UdpMulticastAddr = "239.0.0.1:10001"
+var UdpMulticastAddr = "239.255.0.1:10001"
 var UdpMulticastInterface = "enp5s0"
 
 var IpPrefix = os.Getenv("IP_PREFIX")

@@ -64,6 +64,13 @@ func (s *Server) Run() {
 		s.Listen()
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		s.ListenMulticast()
+	}()
+
 	wg.Wait()
 }
 
