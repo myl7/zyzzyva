@@ -54,22 +54,22 @@ func NewServer(id int) *Server {
 	}
 }
 
-func (s *Server) Run() error {
+func (s *Server) Run() {
 	l, err := net.Listen("tcp", conf.GetListenAddr(s.id))
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		var n int32
 		err = binary.Read(conn, binary.BigEndian, &n)
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		b := make([]byte, n)
@@ -99,10 +99,7 @@ func (s *Server) Run() error {
 				panic(err)
 			}
 
-			err := s.handleC2p(c2p)
-			if err != nil {
-				panic(err)
-			}
+			s.handleC2p(c2p)
 		case msg.TypeP2r:
 			log.Println("Got p2r")
 
@@ -112,23 +109,20 @@ func (s *Server) Run() error {
 				panic(err)
 			}
 
-			err := s.handleP2r(p2r)
-			if err != nil {
-				panic(err)
-			}
+			s.handleP2r(p2r)
 		default:
 			panic(errors.New("unknown msg type"))
 		}
 	}
 }
 
-func (s *Server) handleC2p(c2p msg.Client2Primary) error {
+func (s *Server) handleC2p(c2p msg.Client2Primary) {
 	if !msg.VerifySig(c2p, []*rsa.PublicKey{conf.Pub[c2p.Req.ClientId]}) {
-		return nil
+		return
 	}
 
 	if c, ok := s.respCache[c2p.Req.ClientId]; ok && c.timestamp >= c2p.Req.Timestamp {
-		return nil
+		return
 	} else {
 		s.respCache[c2p.Req.ClientId] = struct {
 			state     int
@@ -218,13 +212,11 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) error {
 		}
 	}
 	wg.Wait()
-
-	return nil
 }
 
-func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
+func (s *Server) handleP2r(p2r msg.Primary2Replica) {
 	if !msg.VerifySig(p2r, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[p2r.Req.ClientId]}) {
-		return nil
+		return
 	}
 
 	r := p2r.Req
@@ -233,17 +225,17 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
 	rd := utils.GenHashObj(r)
 
 	if !bytes.Equal(rd, or.ReqHash) {
-		return nil
+		return
 	}
 
 	if or.Seq != s.s.nextSeq {
-		return nil
+		return
 	}
 
 	hh := s.s.historyHash
 	hh.Write(rd)
 	if !bytes.Equal(hh.Sum(nil), or.HistoryHash) {
-		return nil
+		return
 	}
 
 	s.s.history = append(s.s.history, r)
@@ -274,13 +266,11 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) error {
 
 	conn, err := net.Dial("tcp", conf.GetReqAddr(r.ClientId))
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	_, err = conn.Write(utils.Serialize(r2c))
 	if err != nil {
-		return err
+		panic(err)
 	}
-
-	return nil
 }

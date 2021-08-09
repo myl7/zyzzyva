@@ -20,10 +20,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := s.Run()
-			if err != nil {
-				panic(err)
-			}
+			s.Run()
 		}()
 	}
 
@@ -32,10 +29,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := c.Run()
-			if err != nil {
-				panic(err)
-			}
+			c.Run()
 		}()
 	}
 

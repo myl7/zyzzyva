@@ -51,22 +51,17 @@ func specResKeyFromR2C(r2c msg.Replica2Client) specResKey {
 	}
 }
 
-func (c *Client) Run() error {
+func (c *Client) Run() {
 	spec := make(chan msg.Replica2Client, conf.N)
 
-	go func() {
-		err := c.Listen(spec)
-		if err != nil {
-			panic(err)
-		}
-	}()
+	go c.Listen(spec)
 
 	for {
 		time.Sleep(1 * time.Second)
 
 		in, err := conf.GetRandInput()
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		r := msg.Request{
@@ -83,12 +78,12 @@ func (c *Client) Run() error {
 
 		conn, err := net.Dial("tcp", conf.GetReqAddr(c.primary))
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		_, err = conn.Write(utils.Serialize(c2p))
 		if err != nil {
-			return err
+			panic(err)
 		}
 
 		c.listenMu.Lock()
@@ -147,10 +142,10 @@ func (c *Client) Run() error {
 	}
 }
 
-func (c *Client) Listen(spec chan<- msg.Replica2Client) error {
+func (c *Client) Listen(spec chan<- msg.Replica2Client) {
 	l, err := net.Listen("tcp", conf.GetListenAddr(c.id))
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	for {
