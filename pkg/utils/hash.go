@@ -15,5 +15,5 @@ func VerifyHash(digest []byte, b []byte) bool {
 }
 
 func GenHashObj(obj interface{}) []byte {
-	return GenHash(Serialize(obj))
+	return GenHash(Ser(obj))
 }

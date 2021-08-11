@@ -111,21 +111,13 @@ func (s *Server) ListenMulticast() {
 }
 
 func (s *Server) handle(b []byte) {
-	var m struct {
-		T int
-	}
-	err := json.Unmarshal(b, &m)
-	if err != nil {
-		panic(err)
-	}
-
-	t := m.T
+	t := utils.DeType(b)
 	switch t {
 	case msg.TypeReq:
 		log.Println("Got rm")
 
 		var rm msg.ReqMsg
-		err = json.Unmarshal(b, &rm)
+		err := json.Unmarshal(b, &rm)
 		if err != nil {
 			panic(err)
 		}
@@ -135,7 +127,7 @@ func (s *Server) handle(b []byte) {
 		log.Println("Got orm")
 
 		var orm msg.OrderReqMsg
-		err = json.Unmarshal(b, &orm)
+		err := json.Unmarshal(b, &orm)
 		if err != nil {
 			panic(err)
 		}

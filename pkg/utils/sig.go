@@ -20,9 +20,9 @@ func VerifySig(digest []byte, sig []byte, pub *rsa.PublicKey) bool {
 }
 
 func GenSigObj(obj interface{}, priv *rsa.PrivateKey) []byte {
-	return GenSig(GenHash(Serialize(obj)), priv)
+	return GenSig(GenHash(Ser(obj)), priv)
 }
 
 func VerifySigObj(obj interface{}, sig []byte, pub *rsa.PublicKey) bool {
-	return VerifySig(GenHash(Serialize(obj)), sig, pub)
+	return VerifySig(GenHash(Ser(obj)), sig, pub)
 }

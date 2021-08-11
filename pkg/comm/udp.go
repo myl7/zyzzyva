@@ -41,11 +41,11 @@ func UdpMulticast(b []byte) {
 }
 
 func UdpSendObj(obj interface{}, tid int) {
-	UdpSend(utils.Serialize(obj), tid)
+	UdpSend(utils.Ser(obj), tid)
 }
 
 func UdpMulticastObj(obj interface{}) {
-	UdpMulticast(utils.Serialize(obj))
+	UdpMulticast(utils.Ser(obj))
 }
 
 func ListenMulticastUdp() *net.UDPConn {
