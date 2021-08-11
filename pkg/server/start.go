@@ -90,29 +90,7 @@ func (s *Server) Listen() {
 
 		b := buf[:n]
 
-		var m struct {
-			T int
-		}
-		err = json.Unmarshal(b, &m)
-		if err != nil {
-			panic(err)
-		}
-
-		t := m.T
-		switch t {
-		case msg.TypeReq:
-			log.Println("Got rm")
-
-			var rm msg.ReqMsg
-			err = json.Unmarshal(b, &rm)
-			if err != nil {
-				panic(err)
-			}
-
-			s.handleReq(rm)
-		default:
-			panic(errors.New("unknown msg type"))
-		}
+		go s.handle(b)
 	}
 }
 
@@ -128,29 +106,43 @@ func (s *Server) ListenMulticast() {
 
 		b := buf[:n]
 
-		var m struct {
-			T int
-		}
-		err = json.Unmarshal(b, &m)
+		go s.handle(b)
+	}
+}
+
+func (s *Server) handle(b []byte) {
+	var m struct {
+		T int
+	}
+	err := json.Unmarshal(b, &m)
+	if err != nil {
+		panic(err)
+	}
+
+	t := m.T
+	switch t {
+	case msg.TypeReq:
+		log.Println("Got rm")
+
+		var rm msg.ReqMsg
+		err = json.Unmarshal(b, &rm)
 		if err != nil {
 			panic(err)
 		}
 
-		t := m.T
-		switch t {
-		case msg.TypeOrderReq:
-			log.Println("Got orm")
+		s.handleReq(rm)
+	case msg.TypeOrderReq:
+		log.Println("Got orm")
 
-			var orm msg.OrderReqMsg
-			err = json.Unmarshal(b, &orm)
-			if err != nil {
-				panic(err)
-			}
-
-			s.handleOrderReq(orm)
-		default:
-			panic(errors.New("unknown msg type"))
+		var orm msg.OrderReqMsg
+		err = json.Unmarshal(b, &orm)
+		if err != nil {
+			panic(err)
 		}
+
+		s.handleOrderReq(orm)
+	default:
+		panic(errors.New("unknown msg type"))
 	}
 }
 
