@@ -6,7 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/json"
 	"errors"
-	"github.com/myl7/zyzzyva/pkg/comu"
+	"github.com/myl7/zyzzyva/pkg/comm"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
@@ -28,7 +28,7 @@ type Server struct {
 }
 
 type state struct {
-	history     []msg.Request
+	history     []msg.Req
 	historyHash hash.Hash
 	maxCC       int
 	view        int
@@ -100,16 +100,16 @@ func (s *Server) Listen() {
 
 		t := m.T
 		switch t {
-		case msg.TypeC2p:
-			log.Println("Got c2p")
+		case msg.TypeReq:
+			log.Println("Got rm")
 
-			var c2p msg.Client2Primary
-			err = json.Unmarshal(b, &c2p)
+			var rm msg.ReqMsg
+			err = json.Unmarshal(b, &rm)
 			if err != nil {
 				panic(err)
 			}
 
-			s.handleC2p(c2p)
+			s.handleReq(rm)
 		default:
 			panic(errors.New("unknown msg type"))
 		}
@@ -117,7 +117,7 @@ func (s *Server) Listen() {
 }
 
 func (s *Server) ListenMulticast() {
-	l := comu.ListenMulticastUdp()
+	l := comm.ListenMulticastUdp()
 	buf := make([]byte, 1*1024*1024)
 
 	for {
@@ -138,42 +138,42 @@ func (s *Server) ListenMulticast() {
 
 		t := m.T
 		switch t {
-		case msg.TypeP2r:
-			log.Println("Got p2r")
+		case msg.TypeOrderReq:
+			log.Println("Got orm")
 
-			var p2r msg.Primary2Replica
-			err = json.Unmarshal(b, &p2r)
+			var orm msg.OrderReqMsg
+			err = json.Unmarshal(b, &orm)
 			if err != nil {
 				panic(err)
 			}
 
-			s.handleP2r(p2r)
+			s.handleOrderReq(orm)
 		default:
 			panic(errors.New("unknown msg type"))
 		}
 	}
 }
 
-func (s *Server) handleC2p(c2p msg.Client2Primary) {
-	if !msg.VerifySig(c2p, []*rsa.PublicKey{conf.Pub[c2p.Req.ClientId]}) {
+func (s *Server) handleReq(rm msg.ReqMsg) {
+	if !msg.VerifySig(rm, []*rsa.PublicKey{conf.Pub[rm.Req.CId]}) {
 		return
 	}
 
-	if c, ok := s.respCache[c2p.Req.ClientId]; ok && c.timestamp >= c2p.Req.Timestamp {
+	if c, ok := s.respCache[rm.Req.CId]; ok && c.timestamp >= rm.Req.Timestamp {
 		return
 	} else {
-		s.respCache[c2p.Req.ClientId] = struct {
+		s.respCache[rm.Req.CId] = struct {
 			state     int
 			timestamp int64
-		}{timestamp: c2p.Req.Timestamp}
+		}{timestamp: rm.Req.Timestamp}
 	}
 
 	seq := s.s.nextSeq
 	s.s.nextSeq += 1
-	s.s.history = append(s.s.history, c2p.Req)
+	s.s.history = append(s.s.history, rm.Req)
 
-	r := c2p.Req
-	rs := c2p.ReqSig
+	r := rm.Req
+	rs := rm.ReqSig
 	rd := utils.GenHashObj(r)
 
 	s.s.historyHash.Write(rd)
@@ -186,8 +186,8 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 		Extra:       conf.Extra,
 	}
 	ors := utils.GenSigObj(or, conf.Priv[s.id])
-	p2r := msg.Primary2Replica{
-		T:           msg.TypeP2r,
+	orm := msg.OrderReqMsg{
+		T:           msg.TypeOrderReq,
 		OrderReq:    or,
 		OrderReqSig: ors,
 		Req:         r,
@@ -200,47 +200,47 @@ func (s *Server) handleC2p(c2p msg.Client2Primary) {
 	go func() {
 		defer wg.Done()
 
-		res := utils.GenHash(p2r.Req.Data)
-		resd := utils.GenHash(res)
-		sr := msg.SpecResponse{
+		rep := utils.GenHash(orm.Req.Data)
+		repd := utils.GenHash(rep)
+		sr := msg.SpecRes{
 			View:        s.s.view,
 			Seq:         or.Seq,
 			HistoryHash: s.s.historyHash.Sum(nil),
-			ResHash:     resd,
-			ClientId:    r.ClientId,
+			ResHash:     repd,
+			CId:         r.CId,
 			Timestamp:   r.Timestamp,
 		}
 		srs := utils.GenSigObj(sr, conf.Priv[s.id])
-		r2c := msg.Replica2Client{
-			T:           msg.TypeR2c,
+		srm := msg.SpecResMsg{
+			T:           msg.TypeSpecRes,
 			SpecRes:     sr,
 			SpecResSig:  srs,
-			ServerId:    s.id,
-			Result:      res,
+			SId:         s.id,
+			Reply:       rep,
 			OrderReq:    or,
 			OrderReqSig: ors,
 		}
 
-		comu.UdpSendObj(r2c, r.ClientId)
+		comm.UdpSendObj(srm, r.CId)
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		comu.UdpMulticastObj(p2r)
+		comm.UdpMulticastObj(orm)
 	}()
 
 	wg.Wait()
 }
 
-func (s *Server) handleP2r(p2r msg.Primary2Replica) {
-	if !msg.VerifySig(p2r, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[p2r.Req.ClientId]}) {
+func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
+	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[orm.Req.CId]}) {
 		return
 	}
 
-	r := p2r.Req
-	or := p2r.OrderReq
-	ors := p2r.OrderReqSig
+	r := orm.Req
+	or := orm.OrderReq
+	ors := orm.OrderReqSig
 	rd := utils.GenHashObj(r)
 
 	if !bytes.Equal(rd, or.ReqHash) {
@@ -262,26 +262,26 @@ func (s *Server) handleP2r(p2r msg.Primary2Replica) {
 	seq := s.s.nextSeq
 	s.s.nextSeq += 1
 
-	res := utils.GenHash(p2r.Req.Data)
-	resd := utils.GenHash(res)
-	sr := msg.SpecResponse{
+	rep := utils.GenHash(orm.Req.Data)
+	repd := utils.GenHash(rep)
+	sr := msg.SpecRes{
 		View:        s.s.view,
 		Seq:         seq,
 		HistoryHash: s.s.historyHash.Sum(nil),
-		ResHash:     resd,
-		ClientId:    r.ClientId,
+		ResHash:     repd,
+		CId:         r.CId,
 		Timestamp:   r.Timestamp,
 	}
 	srs := utils.GenSigObj(sr, conf.Priv[s.id])
-	r2c := msg.Replica2Client{
-		T:           msg.TypeR2c,
+	srm := msg.SpecResMsg{
+		T:           msg.TypeSpecRes,
 		SpecRes:     sr,
 		SpecResSig:  srs,
-		ServerId:    s.id,
-		Result:      res,
+		SId:         s.id,
+		Reply:       rep,
 		OrderReq:    or,
 		OrderReqSig: ors,
 	}
 
-	comu.UdpSendObj(r2c, r.ClientId)
+	comm.UdpSendObj(srm, r.CId)
 }

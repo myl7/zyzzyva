@@ -1,4 +1,4 @@
-package comu
+package comm
 
 import (
 	"github.com/myl7/zyzzyva/pkg/conf"

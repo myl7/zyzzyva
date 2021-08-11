@@ -6,7 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/myl7/zyzzyva/pkg/comu"
+	"github.com/myl7/zyzzyva/pkg/comm"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
@@ -39,20 +39,20 @@ type specResKey struct {
 	result      string
 }
 
-func specResKeyFromR2C(r2c msg.Replica2Client) specResKey {
+func specRes2Key(srm msg.SpecResMsg) specResKey {
 	return specResKey{
-		view:        r2c.SpecRes.View,
-		seq:         r2c.SpecRes.Seq,
-		historyHash: base64.StdEncoding.EncodeToString(r2c.SpecRes.HistoryHash),
-		resHash:     base64.StdEncoding.EncodeToString(r2c.SpecRes.ResHash),
-		clientId:    r2c.SpecRes.ClientId,
-		timestamp:   r2c.SpecRes.Timestamp,
-		result:      base64.StdEncoding.EncodeToString(r2c.Result),
+		view:        srm.SpecRes.View,
+		seq:         srm.SpecRes.Seq,
+		historyHash: base64.StdEncoding.EncodeToString(srm.SpecRes.HistoryHash),
+		resHash:     base64.StdEncoding.EncodeToString(srm.SpecRes.ResHash),
+		clientId:    srm.SpecRes.CId,
+		timestamp:   srm.SpecRes.Timestamp,
+		result:      base64.StdEncoding.EncodeToString(srm.Reply),
 	}
 }
 
 func (c *Client) Run() {
-	spec := make(chan msg.Replica2Client, conf.N)
+	spec := make(chan msg.SpecResMsg, conf.N)
 
 	go c.Listen(spec)
 
@@ -64,19 +64,19 @@ func (c *Client) Run() {
 			panic(err)
 		}
 
-		r := msg.Request{
+		r := msg.Req{
 			Data:      in,
 			Timestamp: time.Now().UnixNano(),
-			ClientId:  c.id,
+			CId:       c.id,
 		}
 		rs := utils.GenSigObj(r, conf.Priv[c.id])
-		c2p := msg.Client2Primary{
-			T:      msg.TypeC2p,
+		rm := msg.ReqMsg{
+			T:      msg.TypeReq,
 			Req:    r,
 			ReqSig: rs,
 		}
 
-		comu.UdpSendObj(c2p, c.primary)
+		comm.UdpSendObj(rm, c.primary)
 
 		c.listenMu.Lock()
 		c.listen = true
@@ -84,7 +84,7 @@ func (c *Client) Run() {
 
 		srKeyMap := make(map[specResKey]struct {
 			n   int
-			r2c msg.Replica2Client
+			srm msg.SpecResMsg
 		})
 
 		func() {
@@ -95,11 +95,11 @@ func (c *Client) Run() {
 				select {
 				case <-ctx.Done():
 					return
-				case r2c := <-spec:
-					k := specResKeyFromR2C(r2c)
+				case srm := <-spec:
+					k := specRes2Key(srm)
 					v := srKeyMap[k]
 					v.n += 1
-					v.r2c = r2c
+					v.srm = srm
 					srKeyMap[k] = v
 
 					if v.n >= 3*conf.F+1 {
@@ -114,15 +114,15 @@ func (c *Client) Run() {
 		c.listenMu.Unlock()
 
 		maxN := 0
-		var maxR2c msg.Replica2Client
+		var maxR2c msg.SpecResMsg
 		for _, v := range srKeyMap {
 			if v.n > maxN {
 				maxN = v.n
-				maxR2c = v.r2c
+				maxR2c = v.srm
 			}
 		}
 		if maxN >= 3*conf.F+1 {
-			out := maxR2c.Result
+			out := maxR2c.Reply
 			if utils.VerifyHash(out, in) {
 				log.Println("OK")
 			} else {
@@ -134,7 +134,7 @@ func (c *Client) Run() {
 	}
 }
 
-func (c *Client) Listen(spec chan<- msg.Replica2Client) {
+func (c *Client) Listen(spec chan<- msg.SpecResMsg) {
 	l, err := net.ListenPacket("udp", conf.GetListenAddr(c.id))
 	if err != nil {
 		panic(err)
@@ -166,20 +166,20 @@ func (c *Client) Listen(spec chan<- msg.Replica2Client) {
 
 		t := m.T
 		switch t {
-		case msg.TypeR2c:
-			log.Println("Got r2c")
+		case msg.TypeSpecRes:
+			log.Println("Got srm")
 
-			var r2c msg.Replica2Client
-			err = json.Unmarshal(b, &r2c)
+			var srm msg.SpecResMsg
+			err = json.Unmarshal(b, &srm)
 			if err != nil {
 				panic(err)
 			}
 
-			if !msg.VerifySig(r2c, []*rsa.PublicKey{conf.Pub[r2c.ServerId], conf.Pub[c.primary]}) {
+			if !msg.VerifySig(srm, []*rsa.PublicKey{conf.Pub[srm.SId], conf.Pub[c.primary]}) {
 				continue
 			}
 
-			spec <- r2c
+			spec <- srm
 		default:
 			panic(errors.New("unknown msg type"))
 		}
