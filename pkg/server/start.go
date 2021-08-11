@@ -10,43 +10,29 @@ import (
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
-	"hash"
 	"log"
 	"net"
 	"sync"
 )
 
 type Server struct {
-	id          int
-	s           state
-	committedCP checkpoint
-	tentativeCP checkpoint
-	respCache   map[int]struct {
+	id            int
+	history       []msg.Req
+	historyHashes [][]byte
+	maxCC         int
+	view          int
+	nextSeq       int
+	committedCP   msg.CP
+	tentativeCP   msg.CP
+	respCache     map[int]struct {
 		state     int
 		timestamp int64
 	}
 }
 
-type state struct {
-	history     []msg.Req
-	historyHash hash.Hash
-	maxCC       int
-	view        int
-	nextSeq     int
-}
-
-type checkpoint struct {
-	seq   int
-	state state
-}
-
 func NewServer(id int) *Server {
-	s := state{
-		historyHash: sha512.New(),
-	}
 	return &Server{
 		id: id,
-		s:  s,
 		respCache: make(map[int]struct {
 			state     int
 			timestamp int64
@@ -152,20 +138,25 @@ func (s *Server) handleReq(rm msg.ReqMsg) {
 		}{timestamp: rm.Req.Timestamp}
 	}
 
-	seq := s.s.nextSeq
-	s.s.nextSeq += 1
-	s.s.history = append(s.s.history, rm.Req)
+	seq := s.nextSeq
+	s.nextSeq += 1
+	s.history = append(s.history, rm.Req)
 
 	r := rm.Req
 	rs := rm.ReqSig
 	rd := utils.GenHashObj(r)
 
-	s.s.historyHash.Write(rd)
+	hh := sha512.New()
+	if s.historyHashes != nil {
+		hh.Write(s.historyHashes[len(s.historyHashes)-1])
+	}
+	hh.Write(rd)
+	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
 
 	or := msg.OrderReq{
-		View:        s.s.view,
+		View:        s.view,
 		Seq:         seq,
-		HistoryHash: s.s.historyHash.Sum(nil),
+		HistoryHash: s.historyHashes[len(s.historyHashes)-1],
 		ReqHash:     rd,
 		Extra:       conf.Extra,
 	}
@@ -187,9 +178,9 @@ func (s *Server) handleReq(rm msg.ReqMsg) {
 		rep := utils.GenHash(orm.Req.Data)
 		repd := utils.GenHash(rep)
 		sr := msg.SpecRes{
-			View:        s.s.view,
+			View:        s.view,
 			Seq:         or.Seq,
-			HistoryHash: s.s.historyHash.Sum(nil),
+			HistoryHash: s.historyHashes[len(s.historyHashes)-1],
 			ResHash:     repd,
 			CId:         r.CId,
 			Timestamp:   r.Timestamp,
@@ -218,7 +209,7 @@ func (s *Server) handleReq(rm msg.ReqMsg) {
 }
 
 func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
-	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.s.view%conf.N], conf.Pub[orm.Req.CId]}) {
+	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.view%conf.N], conf.Pub[orm.Req.CId]}) {
 		return
 	}
 
@@ -231,27 +222,52 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 		return
 	}
 
-	if or.Seq != s.s.nextSeq {
+	if or.Seq != s.nextSeq {
 		return
 	}
 
-	hh := s.s.historyHash
+	hh := sha512.New()
+	if s.historyHashes != nil {
+		hh.Write(s.historyHashes[len(s.historyHashes)-1])
+	}
 	hh.Write(rd)
 	if !bytes.Equal(hh.Sum(nil), or.HistoryHash) {
 		return
 	}
 
-	s.s.history = append(s.s.history, r)
-	s.s.historyHash = hh
-	seq := s.s.nextSeq
-	s.s.nextSeq += 1
+	if len(s.history) >= 2*conf.CPInterval {
+		return
+	} else if len(s.history) == conf.CPInterval {
+		cp := msg.CP{
+			Seq:         s.nextSeq,
+			HistoryHash: hh.Sum(nil),
+			StateHash:   []byte{},
+		}
+		s.tentativeCP = cp
+
+		go func() {
+			cps := utils.GenSigObj(cp, conf.Priv[s.id])
+			cpm := msg.CPMsg{
+				T:     msg.TypeCP,
+				CP:    cp,
+				CPSig: cps,
+			}
+
+			comm.UdpMulticastObj(cpm)
+		}()
+	}
+
+	s.history = append(s.history, r)
+	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
+	seq := s.nextSeq
+	s.nextSeq += 1
 
 	rep := utils.GenHash(orm.Req.Data)
 	repd := utils.GenHash(rep)
 	sr := msg.SpecRes{
-		View:        s.s.view,
+		View:        s.view,
 		Seq:         seq,
-		HistoryHash: s.s.historyHash.Sum(nil),
+		HistoryHash: s.historyHashes[len(s.historyHashes)-1],
 		ResHash:     repd,
 		CId:         r.CId,
 		Timestamp:   r.Timestamp,

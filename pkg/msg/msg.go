@@ -6,6 +6,7 @@ const (
 	TypeReq Type = iota
 	TypeOrderReq
 	TypeSpecRes
+	TypeCP
 )
 
 type Msg struct {
