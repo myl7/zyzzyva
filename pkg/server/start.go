@@ -23,8 +23,11 @@ type Server struct {
 	view          int
 	nextSeq       int
 	committedCP   msg.CP
-	tentativeCP   msg.CP
-	respCache     map[int]struct {
+	tentativeCP   struct {
+		cp   msg.CP
+		recv map[int]bool
+	}
+	respCache map[int]struct {
 		state     int
 		timestamp int64
 	}
@@ -119,6 +122,16 @@ func (s *Server) handle(b []byte) {
 		}
 
 		s.handleOrderReq(orm)
+	case msg.TypeCP:
+		log.Println("Got cpm")
+
+		var cpm msg.CPMsg
+		err := json.Unmarshal(b, &cpm)
+		if err != nil {
+			panic(err)
+		}
+
+		s.handleCP(cpm)
 	default:
 		panic(errors.New("unknown msg type"))
 	}
@@ -243,12 +256,16 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 			HistoryHash: hh.Sum(nil),
 			StateHash:   []byte{},
 		}
-		s.tentativeCP = cp
+		s.tentativeCP = struct {
+			cp   msg.CP
+			recv map[int]bool
+		}{cp: cp, recv: map[int]bool{s.id: true}}
 
 		go func() {
 			cps := utils.GenSigObj(cp, conf.Priv[s.id])
 			cpm := msg.CPMsg{
 				T:     msg.TypeCP,
+				SId:   s.id,
 				CP:    cp,
 				CPSig: cps,
 			}
@@ -284,4 +301,34 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	}
 
 	comm.UdpSendObj(srm, r.CId)
+}
+
+func (s *Server) handleCP(cpm msg.CPMsg) {
+	if !msg.VerifySig(cpm, []*rsa.PublicKey{conf.Pub[cpm.SId]}) {
+		return
+	}
+
+	if !bytes.Equal(cpm.CP.HistoryHash, s.tentativeCP.cp.HistoryHash) || cpm.CP.Seq != s.tentativeCP.cp.Seq || !bytes.Equal(cpm.CP.StateHash, []byte{}) {
+		return
+	}
+
+	s.tentativeCP.recv[cpm.SId] = true
+
+	n := 0
+	for _, v := range s.tentativeCP.recv {
+		if v {
+			n++
+		}
+	}
+
+	if n >= conf.F+1 {
+		s.committedCP = s.tentativeCP.cp
+
+		for i := range s.history {
+			if bytes.Equal(s.historyHashes[i], cpm.CP.HistoryHash) {
+				s.history = s.history[i+1:]
+				s.historyHashes = s.historyHashes[i+1:]
+			}
+		}
+	}
 }

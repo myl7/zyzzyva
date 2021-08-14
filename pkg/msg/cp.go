@@ -8,6 +8,7 @@ type CP struct {
 
 type CPMsg struct {
 	T     Type
+	SId   int
 	CP    CP
 	CPSig []byte
 }
