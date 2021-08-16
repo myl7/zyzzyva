@@ -32,6 +32,7 @@ func (s *Server) handleCP(cpm msg.CPMsg) {
 			if bytes.Equal(s.historyHashes[i], cpm.CP.HistoryHash) {
 				s.history = s.history[i+1:]
 				s.historyHashes = s.historyHashes[i+1:]
+				break
 			}
 		}
 	}

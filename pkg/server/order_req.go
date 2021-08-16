@@ -29,7 +29,7 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	}
 
 	hh := sha512.New()
-	if s.historyHashes != nil {
+	if len(s.historyHashes) > 0 {
 		hh.Write(s.historyHashes[len(s.historyHashes)-1])
 	}
 	hh.Write(rd)
