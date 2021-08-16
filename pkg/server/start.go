@@ -100,6 +100,16 @@ func (s *Server) handle(b []byte) {
 		}
 
 		s.handleCP(cpm)
+	case msg.TypeCommit:
+		log.Println("Got cm")
+
+		var cm msg.CommitMsg
+		err := json.Unmarshal(b, &cm)
+		if err != nil {
+			panic(err)
+		}
+
+		s.handleCommit(cm)
 	default:
 		panic(errors.New("unknown msg type"))
 	}

@@ -42,7 +42,7 @@ func (cm CommitMsg) getAllSig() [][]byte {
 	return sigs
 }
 
-func (cm CommitMsg) getAllPub() []*rsa.PublicKey {
+func (cm CommitMsg) GetAllPub() []*rsa.PublicKey {
 	sids := cm.Commit.CC.SIdList
 	pub := make([]*rsa.PublicKey, 1+len(sids))
 	pub[0] = conf.Pub[cm.Commit.CId]
