@@ -18,7 +18,7 @@ var M = 1
 var KeySize = 2048
 var ClientTimeout = 10 * time.Second
 
-var CPInterval = 100
+var CPInterval = 5
 
 var Extra = []byte("extra")
 
