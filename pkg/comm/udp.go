@@ -48,7 +48,26 @@ func UdpMulticastObj(obj interface{}) {
 	UdpMulticast(utils.Ser(obj))
 }
 
-func ListenMulticastUdp() *net.UDPConn {
+func UdpListen(addr string, handle func([]byte)) {
+	l, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		panic(err)
+	}
+
+	buf := make([]byte, conf.UdpBufSize)
+
+	for {
+		n, _, err := l.ReadFrom(buf)
+		if err != nil {
+			panic(err)
+		}
+
+		b := buf[:n]
+		go handle(b)
+	}
+}
+
+func UdpListenMulticast(handle func([]byte)) {
 	ifi, err := net.InterfaceByName(conf.UdpMulticastInterface)
 	if err != nil {
 		//goland:noinspection GoBoolExpressions
@@ -64,15 +83,25 @@ func ListenMulticastUdp() *net.UDPConn {
 		panic(err)
 	}
 
-	conn, err := net.ListenMulticastUDP("udp", ifi, addr)
+	l, err := net.ListenMulticastUDP("udp", ifi, addr)
 	if err != nil {
 		panic(err)
 	}
 
-	err = conn.SetReadBuffer(1 * 1024 * 1024)
+	err = l.SetReadBuffer(1 * 1024 * 1024)
 	if err != nil {
 		panic(err)
 	}
 
-	return conn
+	buf := make([]byte, 1*1024*1024)
+
+	for {
+		n, _, err := l.ReadFrom(buf)
+		if err != nil {
+			panic(err)
+		}
+
+		b := buf[:n]
+		go handle(b)
+	}
 }

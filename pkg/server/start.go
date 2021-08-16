@@ -1,9 +1,6 @@
 package server
 
 import (
-	"bytes"
-	"crypto/rsa"
-	"crypto/sha512"
 	"encoding/json"
 	"errors"
 	"github.com/myl7/zyzzyva/pkg/comm"
@@ -11,7 +8,6 @@ import (
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
 	"log"
-	"net"
 	"sync"
 )
 
@@ -50,53 +46,25 @@ func (s *Server) Run() {
 	go func() {
 		defer wg.Done()
 
-		s.Listen()
+		s.listen()
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 
-		s.ListenMulticast()
+		s.listenMulticast()
 	}()
 
 	wg.Wait()
 }
 
-func (s *Server) Listen() {
-	l, err := net.ListenPacket("udp", conf.GetListenAddr(s.id))
-	if err != nil {
-		panic(err)
-	}
-
-	buf := make([]byte, 1*1024*1024)
-
-	for {
-		n, _, err := l.ReadFrom(buf)
-		if err != nil {
-			panic(err)
-		}
-
-		b := buf[:n]
-
-		go s.handle(b)
-	}
+func (s *Server) listen() {
+	comm.UdpListen(conf.GetListenAddr(s.id), s.handle)
 }
 
-func (s *Server) ListenMulticast() {
-	l := comm.ListenMulticastUdp()
-	buf := make([]byte, 1*1024*1024)
-
-	for {
-		n, _, err := l.ReadFrom(buf)
-		if err != nil {
-			panic(err)
-		}
-
-		b := buf[:n]
-
-		go s.handle(b)
-	}
+func (s *Server) listenMulticast() {
+	comm.UdpListenMulticast(s.handle)
 }
 
 func (s *Server) handle(b []byte) {
@@ -134,201 +102,5 @@ func (s *Server) handle(b []byte) {
 		s.handleCP(cpm)
 	default:
 		panic(errors.New("unknown msg type"))
-	}
-}
-
-func (s *Server) handleReq(rm msg.ReqMsg) {
-	if !msg.VerifySig(rm, []*rsa.PublicKey{conf.Pub[rm.Req.CId]}) {
-		return
-	}
-
-	if c, ok := s.respCache[rm.Req.CId]; ok && c.timestamp >= rm.Req.Timestamp {
-		return
-	} else {
-		s.respCache[rm.Req.CId] = struct {
-			state     int
-			timestamp int64
-		}{timestamp: rm.Req.Timestamp}
-	}
-
-	seq := s.nextSeq
-	s.nextSeq += 1
-	s.history = append(s.history, rm.Req)
-
-	r := rm.Req
-	rs := rm.ReqSig
-	rd := utils.GenHashObj(r)
-
-	hh := sha512.New()
-	if s.historyHashes != nil {
-		hh.Write(s.historyHashes[len(s.historyHashes)-1])
-	}
-	hh.Write(rd)
-	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
-
-	or := msg.OrderReq{
-		View:        s.view,
-		Seq:         seq,
-		HistoryHash: s.historyHashes[len(s.historyHashes)-1],
-		ReqHash:     rd,
-		Extra:       conf.Extra,
-	}
-	ors := utils.GenSigObj(or, conf.Priv[s.id])
-	orm := msg.OrderReqMsg{
-		T:           msg.TypeOrderReq,
-		OrderReq:    or,
-		OrderReqSig: ors,
-		Req:         r,
-		ReqSig:      rs,
-	}
-
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		rep := utils.GenHash(orm.Req.Data)
-		repd := utils.GenHash(rep)
-		sr := msg.SpecRes{
-			View:        s.view,
-			Seq:         or.Seq,
-			HistoryHash: s.historyHashes[len(s.historyHashes)-1],
-			ResHash:     repd,
-			CId:         r.CId,
-			Timestamp:   r.Timestamp,
-		}
-		srs := utils.GenSigObj(sr, conf.Priv[s.id])
-		srm := msg.SpecResMsg{
-			T:           msg.TypeSpecRes,
-			SpecRes:     sr,
-			SpecResSig:  srs,
-			SId:         s.id,
-			Reply:       rep,
-			OrderReq:    or,
-			OrderReqSig: ors,
-		}
-
-		comm.UdpSendObj(srm, r.CId)
-	}()
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		comm.UdpMulticastObj(orm)
-	}()
-
-	wg.Wait()
-}
-
-func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
-	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.view%conf.N], conf.Pub[orm.Req.CId]}) {
-		return
-	}
-
-	r := orm.Req
-	or := orm.OrderReq
-	ors := orm.OrderReqSig
-	rd := utils.GenHashObj(r)
-
-	if !bytes.Equal(rd, or.ReqHash) {
-		return
-	}
-
-	if or.Seq != s.nextSeq {
-		return
-	}
-
-	hh := sha512.New()
-	if s.historyHashes != nil {
-		hh.Write(s.historyHashes[len(s.historyHashes)-1])
-	}
-	hh.Write(rd)
-	if !bytes.Equal(hh.Sum(nil), or.HistoryHash) {
-		return
-	}
-
-	if len(s.history) >= 2*conf.CPInterval {
-		return
-	} else if len(s.history) == conf.CPInterval {
-		cp := msg.CP{
-			Seq:         s.nextSeq,
-			HistoryHash: hh.Sum(nil),
-			StateHash:   []byte{},
-		}
-		s.tentativeCP = struct {
-			cp   msg.CP
-			recv map[int]bool
-		}{cp: cp, recv: map[int]bool{s.id: true}}
-
-		go func() {
-			cps := utils.GenSigObj(cp, conf.Priv[s.id])
-			cpm := msg.CPMsg{
-				T:     msg.TypeCP,
-				SId:   s.id,
-				CP:    cp,
-				CPSig: cps,
-			}
-
-			comm.UdpMulticastObj(cpm)
-		}()
-	}
-
-	s.history = append(s.history, r)
-	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
-	seq := s.nextSeq
-	s.nextSeq += 1
-
-	rep := utils.GenHash(orm.Req.Data)
-	repd := utils.GenHash(rep)
-	sr := msg.SpecRes{
-		View:        s.view,
-		Seq:         seq,
-		HistoryHash: s.historyHashes[len(s.historyHashes)-1],
-		ResHash:     repd,
-		CId:         r.CId,
-		Timestamp:   r.Timestamp,
-	}
-	srs := utils.GenSigObj(sr, conf.Priv[s.id])
-	srm := msg.SpecResMsg{
-		T:           msg.TypeSpecRes,
-		SpecRes:     sr,
-		SpecResSig:  srs,
-		SId:         s.id,
-		Reply:       rep,
-		OrderReq:    or,
-		OrderReqSig: ors,
-	}
-
-	comm.UdpSendObj(srm, r.CId)
-}
-
-func (s *Server) handleCP(cpm msg.CPMsg) {
-	if !msg.VerifySig(cpm, []*rsa.PublicKey{conf.Pub[cpm.SId]}) {
-		return
-	}
-
-	if !bytes.Equal(cpm.CP.HistoryHash, s.tentativeCP.cp.HistoryHash) || cpm.CP.Seq != s.tentativeCP.cp.Seq || !bytes.Equal(cpm.CP.StateHash, []byte{}) {
-		return
-	}
-
-	s.tentativeCP.recv[cpm.SId] = true
-
-	n := 0
-	for _, v := range s.tentativeCP.recv {
-		if v {
-			n++
-		}
-	}
-
-	if n >= conf.F+1 {
-		s.committedCP = s.tentativeCP.cp
-
-		for i := range s.history {
-			if bytes.Equal(s.historyHashes[i], cpm.CP.HistoryHash) {
-				s.history = s.history[i+1:]
-				s.historyHashes = s.historyHashes[i+1:]
-			}
-		}
 	}
 }

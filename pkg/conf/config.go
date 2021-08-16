@@ -24,6 +24,7 @@ var Extra = []byte("extra")
 
 var UdpMulticastAddr = "239.255.0.1:10001"
 var UdpMulticastInterface = "enp5s0"
+var UdpBufSize = 1 * 1024 * 1024
 
 var IpPrefix = os.Getenv("IP_PREFIX")
 
