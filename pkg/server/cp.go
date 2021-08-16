@@ -29,12 +29,15 @@ func (s *Server) handleCP(cpm msg.CPMsg) {
 	}
 
 	if n >= conf.F+1 {
-		s.committedCP = s.tentativeCP.cp
-
 		for i := range s.history {
 			if bytes.Equal(s.historyHashes[i], cpm.CP.HistoryHash) {
 				s.history = s.history[i+1:]
 				s.historyHashes = s.historyHashes[i+1:]
+				s.committedCP = s.tentativeCP.cp
+				s.tentativeCP = struct {
+					cp   msg.CP
+					recv map[int]bool
+				}{}
 				break
 			}
 		}
