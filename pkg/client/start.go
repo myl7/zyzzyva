@@ -184,7 +184,7 @@ func (c *Client) Listen(spec chan<- msg.SpecResMsg) {
 		b := buf[:n]
 
 		var m struct {
-			T int
+			T msg.Type
 		}
 		err = json.Unmarshal(b, &m)
 		if err != nil {

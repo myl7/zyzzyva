@@ -6,7 +6,6 @@ import (
 	"github.com/myl7/zyzzyva/pkg/comm"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
-	"github.com/myl7/zyzzyva/pkg/utils"
 	"log"
 	"sync"
 )
@@ -68,7 +67,7 @@ func (s *Server) listenMulticast() {
 }
 
 func (s *Server) handle(b []byte) {
-	t := utils.DeType(b)
+	t := msg.DeType(b)
 	switch t {
 	case msg.TypeReq:
 		log.Println("Got rm")
