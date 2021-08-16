@@ -83,8 +83,11 @@ func (c *Client) Run() {
 		c.listenMu.Unlock()
 
 		srKeyMap := make(map[specResKey]struct {
-			n   int
-			srm msg.SpecResMsg
+			n       int
+			sidList []int
+			sigList [][]byte
+			sr      msg.SpecRes
+			reply   []byte
 		})
 
 		func() {
@@ -99,7 +102,10 @@ func (c *Client) Run() {
 					k := specRes2Key(srm)
 					v := srKeyMap[k]
 					v.n += 1
-					v.srm = srm
+					v.sidList = append(v.sidList, srm.SId)
+					v.sigList = append(v.sigList, srm.SpecResSig)
+					v.sr = srm.SpecRes
+					v.reply = srm.Reply
 					srKeyMap[k] = v
 
 					if v.n >= 3*conf.F+1 {
@@ -114,20 +120,41 @@ func (c *Client) Run() {
 		c.listenMu.Unlock()
 
 		maxN := 0
-		var maxR2c msg.SpecResMsg
+		var maxSr msg.SpecRes
+		var sigs [][]byte
+		var sids []int
+		var reply []byte
 		for _, v := range srKeyMap {
 			if v.n > maxN {
 				maxN = v.n
-				maxR2c = v.srm
+				maxSr = v.sr
+				sigs = v.sigList
+				sids = v.sidList
+				reply = v.reply
 			}
 		}
 		if maxN >= 3*conf.F+1 {
-			out := maxR2c.Reply
-			if utils.VerifyHash(out, in) {
+			if utils.VerifyHash(reply, in) {
 				log.Println("OK")
 			} else {
 				log.Fatalln("Failed")
 			}
+		} else if maxN >= 2*conf.F+1 {
+			cc := msg.CC{
+				SpecRes: maxSr,
+				SIdList: sids,
+				SigList: sigs,
+			}
+			commit := msg.Commit{
+				CId: c.id,
+				CC:  cc,
+			}
+			cm := msg.CommitMsg{
+				T:         msg.TypeCommit,
+				Commit:    commit,
+				CommitSig: utils.GenSigObj(c, conf.Priv[c.id]),
+			}
+			comm.UdpMulticastObj(cm)
 		} else {
 			log.Printf("Not complete: %d", maxN)
 		}

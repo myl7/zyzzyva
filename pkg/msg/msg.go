@@ -7,6 +7,7 @@ const (
 	TypeOrderReq
 	TypeSpecRes
 	TypeCP
+	TypeCommit
 )
 
 type Msg struct {
