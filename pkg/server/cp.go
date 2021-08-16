@@ -5,14 +5,17 @@ import (
 	"crypto/rsa"
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
+	"log"
 )
 
 func (s *Server) handleCP(cpm msg.CPMsg) {
 	if !msg.VerifySig(cpm, []*rsa.PublicKey{conf.Pub[cpm.SId]}) {
+		log.Println("Failed to verify sig")
 		return
 	}
 
 	if !bytes.Equal(cpm.CP.HistoryHash, s.tentativeCP.cp.HistoryHash) || cpm.CP.Seq != s.tentativeCP.cp.Seq || !bytes.Equal(cpm.CP.StateHash, []byte{}) {
+		log.Println("Different tentative checkpoint")
 		return
 	}
 

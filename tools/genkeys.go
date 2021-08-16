@@ -42,7 +42,7 @@ func main() {
 
 		err = f.Close()
 		if err != nil {
-			return
+			panic(err)
 		}
 	}
 

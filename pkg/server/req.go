@@ -7,15 +7,18 @@ import (
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
+	"log"
 	"sync"
 )
 
 func (s *Server) handleReq(rm msg.ReqMsg) {
 	if !msg.VerifySig(rm, []*rsa.PublicKey{conf.Pub[rm.Req.CId]}) {
+		log.Println("Failed to verify sig")
 		return
 	}
 
 	if c, ok := s.respCache[rm.Req.CId]; ok && c.timestamp >= rm.Req.Timestamp {
+		log.Println("Too early timestamp")
 		return
 	} else {
 		s.respCache[rm.Req.CId] = struct {

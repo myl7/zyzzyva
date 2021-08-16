@@ -8,10 +8,12 @@ import (
 	"github.com/myl7/zyzzyva/pkg/conf"
 	"github.com/myl7/zyzzyva/pkg/msg"
 	"github.com/myl7/zyzzyva/pkg/utils"
+	"log"
 )
 
 func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.view%conf.N], conf.Pub[orm.Req.CId]}) {
+		log.Println("Failed to verify sig")
 		return
 	}
 
@@ -21,10 +23,12 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	rd := utils.GenHashObj(r)
 
 	if !bytes.Equal(rd, or.ReqHash) {
+		log.Println("Failed to check req hash")
 		return
 	}
 
 	if or.Seq != s.nextSeq {
+		log.Println("Failed to check seq")
 		return
 	}
 
@@ -34,10 +38,12 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	}
 	hh.Write(rd)
 	if !bytes.Equal(hh.Sum(nil), or.HistoryHash) {
+		log.Println("Failed to check history hash")
 		return
 	}
 
 	if len(s.history) >= 2*conf.CPInterval {
+		log.Println("History is full")
 		return
 	} else if len(s.history) == conf.CPInterval {
 		cp := msg.CP{
