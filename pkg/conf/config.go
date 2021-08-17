@@ -10,9 +10,28 @@ import (
 	"time"
 )
 
-var F = 1
+var F = envInt("F", intPtr(1))
 var N = 3*F + 1
-var M = 1
+var M = envInt("M", intPtr(1))
+
+func envInt(key string, val *int) int {
+	v := os.Getenv(key)
+	if v != "" {
+		d, err := strconv.Atoi(v)
+		if err != nil {
+			panic(errors.New(fmt.Sprintf("Env %s is not int", key)))
+		}
+		return d
+	} else if val != nil {
+		return *val
+	} else {
+		panic(errors.New(fmt.Sprintf("Env %s not found", key)))
+	}
+}
+
+func intPtr(d int) *int {
+	return &d
+}
 
 //goland:noinspection GoUnusedGlobalVariable
 var KeySize = 2048
