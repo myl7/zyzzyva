@@ -35,6 +35,8 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 	hh := sha512.New()
 	if len(s.historyHashes) > 0 {
 		hh.Write(s.historyHashes[len(s.historyHashes)-1])
+	} else if len(s.committedCP.HistoryHash) > 0 {
+		hh.Write(s.committedCP.HistoryHash)
 	}
 	hh.Write(rd)
 	if !bytes.Equal(hh.Sum(nil), or.HistoryHash) {
