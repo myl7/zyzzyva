@@ -18,3 +18,4 @@
 .idea/
 /configs/
 /bin/
+/deployments/deploy.py
