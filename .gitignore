@@ -19,3 +19,4 @@
 /configs/
 /bin/
 /deployments/deploy.py
+/logs
