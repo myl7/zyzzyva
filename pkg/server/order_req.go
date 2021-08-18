@@ -49,10 +49,21 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 		return
 	}
 
+	toCP := false
 	if len(s.history) >= 2*conf.CPInterval {
 		log.Println("History is full")
-		return
+		// If checkpoint is buggy, we will still continue
+		// return
 	} else if len(s.history) == conf.CPInterval {
+		toCP = true
+	}
+
+	s.history = append(s.history, r)
+	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
+	seq := s.nextSeq
+	s.nextSeq += 1
+
+	if toCP {
 		cp := msg.CP{
 			Seq:         s.nextSeq,
 			HistoryHash: hh.Sum(nil),
@@ -61,7 +72,7 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 		s.tentativeCP = struct {
 			cp   msg.CP
 			recv map[int]bool
-		}{cp: cp, recv: map[int]bool{s.id: true}}
+		}{cp: cp, recv: make(map[int]bool)}
 
 		go func() {
 			cps := utils.GenSigObj(cp, conf.Priv[s.id])
@@ -75,11 +86,6 @@ func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
 			comm.UdpMulticastObj(cpm)
 		}()
 	}
-
-	s.history = append(s.history, r)
-	s.historyHashes = append(s.historyHashes, hh.Sum(nil))
-	seq := s.nextSeq
-	s.nextSeq += 1
 
 	rep := utils.GenHash(orm.Req.Data)
 	repd := utils.GenHash(rep)
