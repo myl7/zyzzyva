@@ -16,12 +16,12 @@ type Msg struct {
 	T Type
 }
 
-func DeType(b []byte) Type {
+func DeType(b []byte) (Type, error) {
 	var m Msg
 	err := json.Unmarshal(b, &m)
 	if err != nil {
-		panic(err)
+		return 0, err
 	}
 
-	return m.T
+	return m.T, nil
 }

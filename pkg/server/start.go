@@ -69,7 +69,11 @@ func (s *Server) listenMulticast() {
 
 func (s *Server) handle(b []byte) {
 	s.stateMu.Lock()
-	t := msg.DeType(b)
+	t, err := msg.DeType(b)
+	if err != nil {
+		log.Fatalln("Bad msg without type")
+	}
+
 	switch t {
 	case msg.TypeReq:
 		log.Println("Got rm")
