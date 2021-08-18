@@ -38,6 +38,8 @@ func (s *Server) handleCP(cpm msg.CPMsg) {
 					cp   msg.CP
 					recv map[int]bool
 				}{}
+
+				log.Println("Set checkpoint")
 				break
 			}
 		}

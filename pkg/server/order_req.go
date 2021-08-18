@@ -12,6 +12,11 @@ import (
 )
 
 func (s *Server) handleOrderReq(orm msg.OrderReqMsg) {
+	if s.view%conf.N == s.id {
+		log.Println("Be primary")
+		return
+	}
+
 	if !msg.VerifySig(orm, []*rsa.PublicKey{conf.Pub[s.view%conf.N], conf.Pub[orm.Req.CId]}) {
 		log.Println("Failed to verify sig")
 		return
