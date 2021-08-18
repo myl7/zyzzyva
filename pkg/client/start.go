@@ -56,6 +56,8 @@ func (c *Client) Run() {
 
 	go c.Listen(spec)
 
+	time.Sleep(1 * time.Minute)
+
 	for {
 		time.Sleep(1 * time.Second)
 

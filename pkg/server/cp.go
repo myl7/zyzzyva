@@ -43,5 +43,7 @@ func (s *Server) handleCP(cpm msg.CPMsg) {
 				break
 			}
 		}
+	} else {
+		log.Println("Pending checkpoint", n)
 	}
 }
