@@ -12,6 +12,7 @@ import (
 
 type Server struct {
 	id            int
+	stateMu       sync.Mutex
 	history       []msg.Req
 	historyHashes [][]byte
 	maxCC         int
@@ -67,6 +68,7 @@ func (s *Server) listenMulticast() {
 }
 
 func (s *Server) handle(b []byte) {
+	s.stateMu.Lock()
 	t := msg.DeType(b)
 	switch t {
 	case msg.TypeReq:
@@ -112,4 +114,5 @@ func (s *Server) handle(b []byte) {
 	default:
 		panic(errors.New("unknown msg type"))
 	}
+	s.stateMu.Unlock()
 }
