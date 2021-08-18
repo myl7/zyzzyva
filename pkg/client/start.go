@@ -59,6 +59,8 @@ func (c *Client) Run() {
 	for {
 		time.Sleep(1 * time.Second)
 
+		log.Println("Start")
+
 		in, err := conf.GetRandInput()
 		if err != nil {
 			panic(err)
@@ -120,16 +122,16 @@ func (c *Client) Run() {
 		c.listenMu.Unlock()
 
 		maxN := 0
-		var maxSr msg.SpecRes
-		var sigs [][]byte
-		var sids []int
+		// var maxSr msg.SpecRes
+		// var sigs [][]byte
+		// var sids []int
 		var reply []byte
 		for _, v := range srKeyMap {
 			if v.n > maxN {
 				maxN = v.n
-				maxSr = v.sr
-				sigs = v.sigList
-				sids = v.sidList
+				// maxSr = v.sr
+				// sigs = v.sigList
+				// sids = v.sidList
 				reply = v.reply
 			}
 		}
@@ -140,21 +142,27 @@ func (c *Client) Run() {
 				log.Fatalln("Failed")
 			}
 		} else if maxN >= 2*conf.F+1 {
-			cc := msg.CC{
-				SpecRes: maxSr,
-				SIdList: sids,
-				SigList: sigs,
+			log.Println("Requires commit")
+			if utils.VerifyHash(reply, in) {
+				log.Println("OK")
+			} else {
+				log.Fatalln("Failed")
 			}
-			commit := msg.Commit{
-				CId: c.id,
-				CC:  cc,
-			}
-			cm := msg.CommitMsg{
-				T:         msg.TypeCommit,
-				Commit:    commit,
-				CommitSig: utils.GenSigObj(c, conf.Priv[c.id]),
-			}
-			comm.UdpMulticastObj(cm)
+			// cc := msg.CC{
+			// 	SpecRes: maxSr,
+			// 	SIdList: sids,
+			// 	SigList: sigs,
+			// }
+			// commit := msg.Commit{
+			// 	CId: c.id,
+			// 	CC:  cc,
+			// }
+			// cm := msg.CommitMsg{
+			// 	T:         msg.TypeCommit,
+			// 	Commit:    commit,
+			// 	CommitSig: utils.GenSigObj(c, conf.Priv[c.id]),
+			// }
+			// comm.UdpMulticastObj(cm)
 		} else {
 			log.Printf("Not complete: %d", maxN)
 		}
