@@ -68,13 +68,19 @@ func UdpListen(addr string, handle func([]byte)) {
 }
 
 func UdpListenMulticast(handle func([]byte)) {
-	ifi, err := net.InterfaceByName(conf.UdpMulticastInterface)
-	if err != nil {
-		//goland:noinspection GoBoolExpressions
-		if conf.UdpMulticastInterface == "" {
-			ifi = nil
+	var ifi *net.Interface
+	for i := range conf.UdpMulticastInterfaces {
+		var err error
+		ifi, err = net.InterfaceByName(conf.UdpMulticastInterfaces[i])
+		if err != nil {
+			if conf.UdpMulticastInterfaces[i] == "" {
+				ifi = nil
+				break
+			} else if i == len(conf.UdpMulticastInterfaces)-1 {
+				panic(err)
+			}
 		} else {
-			panic(err)
+			break
 		}
 	}
 
